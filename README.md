@@ -3,21 +3,21 @@ AI-based regulatory intelligence for medical devices
 
 AI-powered global regulatory intelligence for medical devices
 
-**Overview**
+**Overview**:
 MedReg Intel uses natural language processing and machine learning to compare medical device regulations across global markets, including FDA, EU MDR/IVDR, and other regions.
 
-**Goal**
+**Goal**:
 To identify similarities and differences between regulatory frameworks and support global regulatory strategy.
 
-**Scope**
+**Scope**:
 FDA 21 CFR Part 820 / QMSR
 EU MDR and IVDR
 Future: NMPA (China), TGA (Australia)
 
-**Approach**
+**Approach**:
 Text preprocessing and structuring
 Embedding-based similarity analysis
 Cross-framework comparison
 
-**Disclaimer**
+**Disclaimer**:
 For research and educational purposes only. Not regulatory advice.
