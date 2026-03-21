@@ -3,6 +3,7 @@
 
 **AI-powered global regulatory intelligence for medical devices**
 
+
 **Overview**:
 MedReg Intel uses natural language processing and machine learning to compare medical device regulations across global markets, including FDA, EU MDR/IVDR, and other regions.
 
