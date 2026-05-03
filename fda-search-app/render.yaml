@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: fda-search-app
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r fda-search-app/requirements.txt
+    startCommand: streamlit run fda-search-app/app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false

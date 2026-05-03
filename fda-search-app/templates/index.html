@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FDA regulation matcher</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>FDA regulation matcher</h1>
+      <p>
+        Upload an SOP or internal procedure. The app classifies <strong>drugs (CDER)</strong>,
+        <strong>devices (CDRH)</strong>, or <strong>biologics (CBER)</strong>, then retrieves matching
+        FDA guidance from your local library with hybrid semantic + lexical ranking.
+      </p>
+    </header>
+
+    {% if not has_key %}
+    <div class="alert warn">
+      Set <code>OPENAI_API_KEY</code> for branch classification and grounded answers.
+      Embeddings default to OpenAI; set <code>EMBEDDING_BACKEND=local</code> to use a pre-trained Hugging Face model (see README).
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <form id="sop-form">
+        <label for="file">SOP document (PDF, DOCX, or TXT)</label>
+        <input id="file" name="file" type="file" accept=".pdf,.docx,.txt" required />
+
+        <div class="row">
+          <div>
+            <span class="badge">Optional</span>
+            <div class="branch-options" style="margin-top: 0.5rem">
+              <label><input type="checkbox" name="branch" value="drug" /> Drugs (CDER)</label>
+              <label><input type="checkbox" name="branch" value="device" /> Devices (CDRH)</label>
+              <label><input type="checkbox" name="branch" value="biologic" /> Biologics (CBER)</label>
+            </div>
+            <p style="margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted)">
+              Leave unchecked to auto-detect from the document.
+            </p>
+          </div>
+          <button type="submit" class="primary" id="submit-btn" {% if not has_key %}disabled{% endif %}>
+            Find regulations
+          </button>
+        </div>
+      </form>
+
+      <div id="status"></div>
+      <div id="results" class="results" hidden></div>
+    </div>
+
+    <footer>
+      Local corpus: {{ docs_dir }}. Refresh PDFs via the Streamlit app “Live updates” tab or your own ingestion, then call
+      <code>POST /api/reload-index</code> or restart the server.
+    </footer>
+  </div>
+
+  <script>
+    const HAS_OPENAI = {{ "true" if has_key else "false" }};
+    const form = document.getElementById("sop-form");
+    const statusEl = document.getElementById("status");
+    const resultsEl = document.getElementById("results");
+    const submitBtn = document.getElementById("submit-btn");
+
+    function badgeClass(branch) {
+      if (branch === "drug") return "badge drug";
+      if (branch === "device") return "badge device";
+      if (branch === "biologic") return "badge biologic";
+      return "badge";
+    }
+
+    function renderResults(data) {
+      const cls = data.classification || {};
+      const branches = (cls.branches || []).map(
+        (b) => `<span class="${badgeClass(b)}">${b}</span>`
+      );
+
+      const sources = (data.sources || [])
+        .map(
+          (s) => `
+        <div class="source">
+          <h3>${escapeHtml(s.filename)} <span class="${badgeClass(s.regulatory_branch)}">${escapeHtml(
+            s.branch_label || s.regulatory_branch
+          )}</span></h3>
+          <p class="excerpt">${escapeHtml(s.excerpt || "")}</p>
+        </div>`
+        )
+        .join("");
+
+      resultsEl.innerHTML = `
+        <h2>Classification</h2>
+        <div class="classification">
+          <p style="margin:0 0 0.5rem">${branches.join(" ")}</p>
+          <p style="margin:0; color: var(--muted); font-size: 0.9rem">${escapeHtml(
+            cls.rationale || ""
+          )}</p>
+          <p style="margin: 0.75rem 0 0; font-size: 0.85rem; color: var(--muted)"><strong>Summary for search:</strong> ${escapeHtml(
+            data.sop_summary || ""
+          )}</p>
+        </div>
+        <h2>Regulatory matches</h2>
+        <div class="answer">${formatAnswer(data.answer_markdown || "")}</div>
+        <h2 style="margin-top: 1.5rem">Sources</h2>
+        ${sources}
+      `;
+      resultsEl.hidden = false;
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function formatAnswer(text) {
+      const escaped = escapeHtml(text);
+      return escaped.replace(/\n/g, "<br />");
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      statusEl.innerHTML = "";
+      resultsEl.hidden = true;
+      resultsEl.innerHTML = "";
+
+      const fd = new FormData();
+      const fileInput = document.getElementById("file");
+      if (!fileInput.files.length) return;
+      fd.append("file", fileInput.files[0]);
+
+      const checked = Array.from(form.querySelectorAll('input[name="branch"]:checked')).map(
+        (c) => c.value
+      );
+      if (checked.length) fd.append("branches", checked.join(","));
+
+      submitBtn.disabled = true;
+      statusEl.innerHTML = '<span class="spinner"></span>Analyzing SOP and searching FDA library…';
+
+      try {
+        const res = await fetch("/api/match-sop", { method: "POST", body: fd });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          statusEl.innerHTML = `<div class="alert err">${escapeHtml(
+            body.detail || res.statusText || "Request failed"
+          )}</div>`;
+          return;
+        }
+        statusEl.innerHTML = "";
+        renderResults(body);
+      } catch (err) {
+        statusEl.innerHTML = `<div class="alert err">${escapeHtml(String(err))}</div>`;
+      } finally {
+        submitBtn.disabled = !HAS_OPENAI;
+      }
+    });
+  </script>
+</body>
+</html>

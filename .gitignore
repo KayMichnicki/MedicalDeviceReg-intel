@@ -1,0 +1,17 @@
+.DS_Store
+.env
+*.pyc
+__pycache__/
+
+# Local Python environments (any path)
+venv/
+.venv/
+fda-search-app/.venv/
+fda-search-app/venv/
+
+# Secrets & local sync state (do not publish)
+fda-search-app/.streamlit/secrets.toml
+fda-search-app/.fda_sync_state.json
+
+# Optional: drop large FDA PDF dumps here — uncomment if you prefer not to track binaries
+# fda-search-app/fda_docs/*.pdf
