@@ -57,15 +57,20 @@ def _ensure_openai_key():
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 
+def _index_cap_cache_key() -> str:
+    """Invalidate vector cache when OpenAI index size cap changes."""
+    return (os.environ.get("FDA_INDEX_MAX_DOCS") or "").strip()
+
+
 @st.cache_resource(show_spinner=False)
-def get_vector_store():
+def get_vector_store(index_cap_key: str):
     documents = load_documents("fda_docs")
     return build_vector_store(documents)
 
 
 @st.cache_resource(show_spinner=False)
-def get_retriever():
-    return get_vector_store().as_retriever(search_kwargs={"k": 20})
+def get_retriever(index_cap_key: str):
+    return get_vector_store(index_cap_key).as_retriever(search_kwargs={"k": 20})
 
 
 @st.cache_resource(show_spinner=False)
@@ -75,11 +80,11 @@ def get_llm():
 
 
 @st.cache_resource(show_spinner=False)
-def get_qa_chain():
+def get_qa_chain(index_cap_key: str):
     # Return source documents for citation display
     return RetrievalQA.from_chain_type(
         llm=get_llm(),
-        retriever=get_retriever(),
+        retriever=get_retriever(index_cap_key),
         return_source_documents=True,
     )
 
@@ -131,13 +136,25 @@ def _rebuild_library_index():
         get_qa_chain.clear()
     except Exception:
         pass
-    _ = get_qa_chain()
+    _ = get_qa_chain(_index_cap_cache_key())
 
 
 openai_available = _ensure_openai_key()
-qa = get_qa_chain() if openai_available else None
-retriever = get_retriever() if openai_available else None
+INDEX_CAP_KEY = _index_cap_cache_key()
+qa = get_qa_chain(INDEX_CAP_KEY) if openai_available else None
+retriever = get_retriever(INDEX_CAP_KEY) if openai_available else None
 
+_cap_raw = os.environ.get("FDA_INDEX_MAX_DOCS", "").strip()
+if _cap_raw:
+    try:
+        _cap_n = int(_cap_raw)
+        if _cap_n > 0:
+            st.sidebar.info(
+                f"**Cost-saving index:** using only the first **{_cap_n}** PDF(s) "
+                "in `fda_docs/` (`FDA_INDEX_MAX_DOCS`). Remove the env var to index all PDFs."
+            )
+    except ValueError:
+        st.sidebar.warning("`FDA_INDEX_MAX_DOCS` is not a positive integer; ignoring.")
 
 search_tab, check_tab, incident_tab, live_tab, draft_tab = st.tabs(
     [
@@ -358,7 +375,7 @@ with incident_tab:
                 ik = "pasted_incident"
             with st.spinner("Summarizing incident and retrieving device guidance chunks…"):
                 try:
-                    vs = get_vector_store()
+                    vs = get_vector_store(_index_cap_cache_key())
                 except Exception as exc:
                     st.error(f"Vector store error: {exc}")
                     st.stop()
@@ -392,7 +409,14 @@ with live_tab:
     with col2:
         search_term = st.text_input("Optional search term", placeholder="e.g., clinical trial endpoints")
     with col3:
-        max_docs = st.number_input("Max docs", min_value=5, max_value=100, value=20, step=5)
+        max_docs = st.number_input(
+            "Max docs (fetch)",
+            min_value=5,
+            max_value=100,
+            value=5,
+            step=5,
+            help="How many FDA guidance listings to crawl this run (not the embedding index cap).",
+        )
 
     centers_codes = []
     for item in centers_select:

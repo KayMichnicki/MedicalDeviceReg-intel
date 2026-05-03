@@ -31,6 +31,7 @@ _vector_store = None
 def get_vector_store():
     global _vector_store
     if _vector_store is None:
+        # Respects FDA_INDEX_MAX_DOCS (see loader.load_documents).
         docs = load_documents(str(FDA_DOCS_DIR))
         if not docs:
             raise RuntimeError(

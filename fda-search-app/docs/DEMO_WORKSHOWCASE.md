@@ -10,6 +10,7 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -r requirements.txt
 ```
 
+- **`FDA_INDEX_MAX_DOCS=5`** — optional; embed only the first five PDFs (sorted by filename) to keep **OpenAI embedding** cost low while testing (`export FDA_INDEX_MAX_DOCS=5` before Streamlit/Uvicorn).
 - **`OPENAI_API_KEY`** — required for Streamlit search, protocol checker, incident summarization, and draft assistant (classification + answers).
 - **`OPENFDA_API_KEY`** — optional; raises OpenFDA rate limits for recall/MAUDE fetches.
 - **`EMBEDDING_BACKEND=local`** — optional; uses Hugging Face embeddings instead of OpenAI when building/running offline demos (`sentence-transformers/all-MiniLM-L6-v2`).

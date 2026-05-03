@@ -84,6 +84,9 @@ def main() -> int:
             print(f"[!] OpenFDA check failed: {exc}")
 
     print("\n[*] Loading PDFs from disk…")
+    cap_env = os.environ.get("FDA_INDEX_MAX_DOCS", "").strip()
+    if cap_env:
+        print(f"    FDA_INDEX_MAX_DOCS={cap_env} (only that many PDFs, sorted by name)")
     from loader import load_documents
 
     records = load_documents(str(FDA_DOCS))

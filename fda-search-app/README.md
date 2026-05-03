@@ -54,6 +54,7 @@ Full checklist (screenshots, Streamlit, FastAPI): [`docs/DEMO_WORKSHOWCASE.md`](
 - Set `OPENAI_API_KEY` secret in Space settings.
 
 ## Notes
+- **`FDA_INDEX_MAX_DOCS`** — cap how many PDFs are embedded when using OpenAI embeddings (sorted filenames, e.g. `export FDA_INDEX_MAX_DOCS=5`). Lowers embedding API cost during experiments. Omit or unset for the full corpus. Streamlit shows a sidebar hint when set.
 - PDFs for the persistent corpus live in `fda-search-app/fda_docs/`.
 - **Medical device workflow**: Live updates default to **CDRH only**; use the **Device incidents → guidance** tab to pull OpenFDA device recalls / MAUDE events and match narratives to your CDRH guidance index. Optional env: `OPENFDA_API_KEY` (higher OpenFDA rate limits).
 - FastAPI: `POST /api/match-incident` with form fields `text`, `incident_kind` mirrors that pipeline.

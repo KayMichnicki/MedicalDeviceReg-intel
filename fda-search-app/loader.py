@@ -42,13 +42,26 @@ def extract_text_from_txt_bytes(file_blocks: bytes) -> str:
     return file_blocks.decode("utf-8", errors="ignore")
 
 
-def load_documents(folder: str) -> list[dict]:
+def _index_max_documents_from_env() -> t.Optional[int]:
+    raw = (os.environ.get("FDA_INDEX_MAX_DOCS") or "").strip()
+    if not raw:
+        return None
+    try:
+        n = int(raw)
+        return n if n > 0 else None
+    except ValueError:
+        return None
+
+
+def load_documents(folder: str, max_documents: t.Optional[int] = None) -> list[dict]:
     docs: list[dict] = []
     if not os.path.isdir(folder):
         return docs
-    for filename in os.listdir(folder):
-        if not filename.lower().endswith(".pdf"):
-            continue
+    cap = max_documents if max_documents is not None else _index_max_documents_from_env()
+    pdf_filenames = sorted(f for f in os.listdir(folder) if f.lower().endswith(".pdf"))
+    if cap is not None:
+        pdf_filenames = pdf_filenames[:cap]
+    for filename in pdf_filenames:
         path = os.path.join(folder, filename)
         text = ""
         with fitz.open(path) as pdf:
