@@ -34,6 +34,20 @@ docker run -e OPENAI_API_KEY=sk-... -p 8501:8501 fda-search-app
 ```
 Navigate to http://localhost:8501
 
+## Demo data & verification (show your work)
+
+```bash
+cd fda-search-app
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+export EMBEDDING_BACKEND=local
+python scripts/demo_generate_and_verify.py
+```
+
+Optional: fetch extra CDRH guidance PDFs into `fda_docs/`: add `--fetch-guidance --fetch-max 10`.
+
+Full checklist (screenshots, Streamlit, FastAPI): [`docs/DEMO_WORKSHOWCASE.md`](docs/DEMO_WORKSHOWCASE.md).
+
 ## Hugging Face Spaces
 - Create a new Space (Streamlit), upload this project.
 - Make sure `requirements.txt` is at `fda-search-app/requirements.txt` or copy it to root.

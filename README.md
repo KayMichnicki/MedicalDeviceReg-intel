@@ -34,3 +34,5 @@ The runnable **FDA guidance search and device incident matcher** lives in [`fda-
 - **Methods & data pipeline** (RAG, OpenFDA, updates): [`fda-search-app/docs/METHOD_AND_DATA_PIPELINE.md`](fda-search-app/docs/METHOD_AND_DATA_PIPELINE.md).
 
 Guidance PDFs for indexing are under `fda-search-app/fda_docs/` (or fetch via the app’s Live updates tab).
+
+**Demo / grading artifact:** run `fda-search-app/scripts/demo_generate_and_verify.py` (see [`fda-search-app/docs/DEMO_WORKSHOWCASE.md`](fda-search-app/docs/DEMO_WORKSHOWCASE.md)).
