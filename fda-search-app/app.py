@@ -27,14 +27,56 @@ from openfda_client import (
     fetch_device_recalls,
     recall_record_to_narrative,
 )
-from regulatory_core import match_incident_to_regulations
+from regulatory_core import match_incident_to_regulations, retrieve_branch_filtered
 
 
-st.set_page_config(page_title="FDA Device & Guidance Search", layout="wide")
-st.title("🔎 FDA Guidance Search (medical device focus)")
+st.set_page_config(page_title="FDA Guidance Search", layout="wide")
+
+MODE_TO_BRANCH = {
+    "Medical devices (CDRH)": "device",
+    "Drugs (CDER)": "drug",
+    "Biologics (CBER)": "biologic",
+    "All (no filter)": None,
+}
+
+
+def _mode_default_centers(mode_label: str) -> list[str]:
+    if mode_label == "Drugs (CDER)":
+        return ["CDER (Drugs)"]
+    if mode_label == "Biologics (CBER)":
+        return ["CBER (Biologics)"]
+    if mode_label == "All (no filter)":
+        return ["CDRH (Devices)", "CDER (Drugs)", "CBER (Biologics)"]
+    return ["CDRH (Devices)"]
+
+
+mode_label = st.sidebar.radio(
+    "Mode",
+    options=list(MODE_TO_BRANCH.keys()),
+    index=0,
+    help="Controls retrieval filtering for search/protocol/draft. Device incidents are available in device mode only.",
+)
+ACTIVE_BRANCH = MODE_TO_BRANCH[mode_label]
+
+title_map = {
+    "device": "FDA Guidance Search — Medical Devices",
+    "drug": "FDA Guidance Search — Drugs",
+    "biologic": "FDA Guidance Search — Biologics",
+    None: "FDA Guidance Search — All",
+}
+st.title(f"🔎 {title_map.get(ACTIVE_BRANCH, 'FDA Guidance Search')}")
+
+logo_cols = st.columns(3)
+with logo_cols[0]:
+    st.image("static/logo_device.svg", width=54, caption="Devices")
+with logo_cols[1]:
+    st.image("static/logo_drug.svg", width=54, caption="Drugs")
+with logo_cols[2]:
+    st.image("static/logo_biologic.svg", width=54, caption="Biologics")
+
 st.caption(
-    "Corpus: CDRH-centered FDA guidance PDFs in `fda_docs/`. "
-    "Use Live updates to refresh device guidance; use Device incidents for recall / MAUDE → guidance mapping."
+    "Corpus: FDA guidance PDFs in `fda_docs/`. "
+    "Use the mode selector to focus retrieval; Live updates fetches new PDFs by center."
 )
 
 
@@ -119,11 +161,43 @@ def _rerank_docs(query: str, docs, top_k: int = 6):
 
 
 def _retrieve_top_docs(query: str, *, top_k: int = 6):
-    if retriever is None:
+    if not openai_available:
         st.warning("Set `OPENAI_API_KEY` to enable FDA guidance retrieval.")
         return []
-    raw_docs = retriever.get_relevant_documents(query)
-    return _rerank_docs(query, raw_docs, top_k=top_k)
+    if ACTIVE_BRANCH is None:
+        raw_docs = retriever.get_relevant_documents(query)
+        return _rerank_docs(query, raw_docs, top_k=top_k)
+    try:
+        vs = get_vector_store(_index_cap_cache_key())
+    except Exception as exc:
+        st.error(f"Vector store error: {exc}")
+        return []
+    # Pull from FAISS, then metadata-filter by branch (plus 'general'), then rerank.
+    return retrieve_branch_filtered(vs, query, [ACTIVE_BRANCH], k=top_k, pool=48)
+
+
+def _answer_from_retrieved_docs(*, user_query: str, docs) -> str:
+    ctx_lines = []
+    for d in (docs or [])[:8]:
+        src = (d.metadata or {}).get("source", "Unknown")
+        excerpt = (d.page_content or "")[:1400]
+        ctx_lines.append(f"Source: {src}\nExcerpt: {excerpt}")
+    context = "\n\n".join(ctx_lines)
+    prompt = textwrap.dedent(
+        f"""
+        You are an FDA regulatory assistant.
+        Using ONLY the context excerpts below, answer the user's question.
+        If the context is insufficient, say what is missing and suggest search terms—do not invent citations.
+
+        User question:
+        {user_query}
+
+        Context excerpts:
+        {context}
+        """
+    ).strip()
+    resp = get_llm().invoke(prompt)
+    return resp.content.strip() if hasattr(resp, "content") else str(resp)
 
 
 def _rebuild_library_index():
@@ -169,14 +243,21 @@ search_tab, check_tab, incident_tab, live_tab, draft_tab = st.tabs(
 with search_tab:
     query = st.text_input("Ask a question about FDA guidance documents", key="search_query")
     if query:
-        if qa is None:
+        if not openai_available:
             st.warning("Set `OPENAI_API_KEY` to enable guidance search.")
             st.stop()
         with st.spinner("Searching FDA documents…"):
-            result = qa.invoke({"query": query})
-            st.success("Answer:")
-            st.write(result.get("result") or result)
-            render_sources(result.get("source_documents"))
+            if ACTIVE_BRANCH is None:
+                result = qa.invoke({"query": query})
+                st.success("Answer:")
+                st.write(result.get("result") or result)
+                render_sources(result.get("source_documents"))
+            else:
+                docs = _retrieve_top_docs(query, top_k=8)
+                answer = _answer_from_retrieved_docs(user_query=query, docs=docs)
+                st.success("Answer:")
+                st.write(answer)
+                render_sources(docs)
 
 
 def _extract_uploaded_files_text(uploaded_files) -> str:
@@ -266,6 +347,9 @@ with check_tab:
 
 
 with incident_tab:
+    if ACTIVE_BRANCH not in (None, "device"):
+        st.info("Device incidents are available in **Medical devices (CDRH)** mode only.")
+        st.stop()
     st.markdown(
         "Pull **device recalls** or **MAUDE adverse events** from OpenFDA, or paste your own narrative, "
         "then map the incident to **CDRH guidance chunks** already in your library index."
@@ -403,8 +487,8 @@ with live_tab:
         centers_select = st.multiselect(
             "Centers",
             options=["CDER (Drugs)", "CDRH (Devices)", "CBER (Biologics)"],
-            default=["CDRH (Devices)"],
-            help="Device-focused workflow defaults to CDRH only; add CDER/CBER if needed.",
+            default=_mode_default_centers(mode_label),
+            help="Defaults follow the selected mode; adjust as needed.",
         )
     with col2:
         search_term = st.text_input("Optional search term", placeholder="e.g., clinical trial endpoints")
