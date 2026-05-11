@@ -241,23 +241,34 @@ search_tab, check_tab, incident_tab, live_tab, draft_tab = st.tabs(
 )
 
 with search_tab:
-    query = st.text_input("Ask a question about FDA guidance documents", key="search_query")
-    if query:
-        if not openai_available:
+    st.caption("Search runs only when you click **Search** (saves API tokens on reruns while you edit).")
+    with st.form("guidance_search_form", clear_on_submit=False):
+        query = st.text_input(
+            "Ask a question about FDA guidance documents",
+            key="search_query",
+            placeholder="e.g., What does FDA expect for design validation under QSR?",
+        )
+        submitted = st.form_submit_button("Search", type="primary")
+
+    if submitted:
+        q = (query or "").strip()
+        if not q:
+            st.warning("Enter a question, then click **Search**.")
+        elif not openai_available:
             st.warning("Set `OPENAI_API_KEY` to enable guidance search.")
-            st.stop()
-        with st.spinner("Searching FDA documents…"):
-            if ACTIVE_BRANCH is None:
-                result = qa.invoke({"query": query})
-                st.success("Answer:")
-                st.write(result.get("result") or result)
-                render_sources(result.get("source_documents"))
-            else:
-                docs = _retrieve_top_docs(query, top_k=8)
-                answer = _answer_from_retrieved_docs(user_query=query, docs=docs)
-                st.success("Answer:")
-                st.write(answer)
-                render_sources(docs)
+        else:
+            with st.spinner("Searching FDA documents…"):
+                if ACTIVE_BRANCH is None:
+                    result = qa.invoke({"query": q})
+                    st.success("Answer:")
+                    st.write(result.get("result") or result)
+                    render_sources(result.get("source_documents"))
+                else:
+                    docs = _retrieve_top_docs(q, top_k=8)
+                    answer = _answer_from_retrieved_docs(user_query=q, docs=docs)
+                    st.success("Answer:")
+                    st.write(answer)
+                    render_sources(docs)
 
 
 def _extract_uploaded_files_text(uploaded_files) -> str:
